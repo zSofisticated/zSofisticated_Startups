@@ -32,95 +32,9 @@ def init_gsheets():
 def clean_text(text):
     return ' '.join(text.split()).strip() if text else ''
 
-# Scrape Crunchbase News
-def scrape_crunchbase():
-    print("Scraping Crunchbase News...")
-    base_url = "https://news.crunchbase.com"
-    url = f"{base_url}/startups/series-a-series-b-funding-europe-middle-east/"
-    startups = []
-    
-    try:
-        response = requests.get(url, headers=HEADERS)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        for article in soup.select('article.post-block'):
-            try:
-                title = clean_text(article.select_one('h2 a').text)
-                article_url = urljoin(base_url, article.select_one('h2 a')['href'])
-                summary = clean_text(article.select_one('.post-block__content').text)
-                
-                # Get details from article page
-                article_resp = requests.get(article_url, headers=HEADERS)
-                article_soup = BeautifulSoup(article_resp.text, 'html.parser')
-                
-                # Extract metadata
-                metadata = article_soup.select('.article__byline span')
-                date = metadata[0].text if metadata else ''
-                
-                startups.append({
-                    'Name': title,
-                    'Industry': '',
-                    'Country': '',
-                    'Activities': summary,
-                    'Website URL': '',
-                    'Contact Name': '',
-                    'Contact Position': '',
-                    'Contact Email': '',
-                    'LinkedIn Url': '',
-                    'Funding Stage': 'Series A/B',
-                    'Last update': date or datetime.now().strftime('%Y-%m-%d'),
-                    'Source': 'Crunchbase'
-                })
-                time.sleep(random.uniform(1, 3))  # Rate limiting
-            except Exception as e:
-                print(f"Error processing Crunchbase article: {str(e)}")
-                
-    except Exception as e:
-        print(f"Error scraping Crunchbase: {str(e)}")
-    
-    return startups
-
-# Scrape SeedTable
-def scrape_seedtable():
-    print("Scraping SeedTable...")
-    url = "https://www.seedtable.com/startups-europe"
-    startups = []
-    
-    try:
-        response = requests.get(url, headers=HEADERS)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        for card in soup.select('.company-card'):
-            try:
-                name = clean_text(card.select_one('.company-name').text)
-                website = card.select_one('a.company-website')['href'] if card.select_one('a.company-website') else ''
-                description = clean_text(card.select_one('.company-description').text) if card.select_one('.company-description') else ''
-                
-                startups.append({
-                    'Name': name,
-                    'Industry': '',
-                    'Country': '',
-                    'Activities': description,
-                    'Website URL': website,
-                    'Contact Name': '',
-                    'Contact Position': '',
-                    'Contact Email': '',
-                    'LinkedIn Url': '',
-                    'Funding Stage': 'Series A/B',
-                    'Last update': datetime.now().strftime('%Y-%m-%d'),
-                    'Source': 'SeedTable'
-                })
-            except Exception as e:
-                print(f"Error processing SeedTable startup: {str(e)}")
-                
-    except Exception as e:
-        print(f"Error scraping SeedTable: {str(e)}")
-    
-    return startups
-
-# Scrape EU-Startups
-def scrape_eu_startups():
-    print("Scraping EU-Startups...")
+# Scrape EU-Startups Directory
+def scrape_eu_startups_directory():
+    print("Scraping EU-Startups Directory...")
     base_url = "https://www.eu-startups.com"
     url = f"{base_url}/directory/"
     startups = []
@@ -129,16 +43,36 @@ def scrape_eu_startups():
         response = requests.get(url, headers=HEADERS)
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        for company in soup.select('.company-list-item'):
+        # Find all company listings
+        company_listings = soup.select('.company-listing')
+        
+        for company in company_listings:
             try:
-                name = clean_text(company.select_one('.company-name').text)
+                # Extract basic information
+                name = clean_text(company.select_one('.company-name').text) if company.select_one('.company-name') else ''
                 website = company.select_one('.company-website a')['href'] if company.select_one('.company-website a') else ''
                 description = clean_text(company.select_one('.company-description').text) if company.select_one('.company-description') else ''
                 country = clean_text(company.select_one('.company-country').text) if company.select_one('.company-country') else ''
                 
+                # Extract additional details if available
+                industry = ''
+                funding_stage = ''
+                date_updated = datetime.now().strftime('%Y-%m-%d')
+                
+                # Try to find metadata elements
+                metadata = company.select('.company-meta span')
+                for item in metadata:
+                    text = clean_text(item.text)
+                    if 'Industry:' in text:
+                        industry = text.replace('Industry:', '').strip()
+                    elif 'Funding:' in text:
+                        funding_stage = text.replace('Funding:', '').strip()
+                    elif 'Updated:' in text:
+                        date_updated = text.replace('Updated:', '').strip()
+                
                 startups.append({
                     'Name': name,
-                    'Industry': '',
+                    'Industry': industry,
                     'Country': country,
                     'Activities': description,
                     'Website URL': website,
@@ -146,93 +80,20 @@ def scrape_eu_startups():
                     'Contact Position': '',
                     'Contact Email': '',
                     'LinkedIn Url': '',
-                    'Funding Stage': 'Series A/B',
-                    'Last update': datetime.now().strftime('%Y-%m-%d'),
-                    'Source': 'EU-Startups'
+                    'Funding Stage': funding_stage or 'Unknown',
+                    'Last update': date_updated,
+                    'Source': 'EU-Startups Directory'
                 })
+                
+                # Respectful delay between requests
+                time.sleep(random.uniform(1, 3))
+                
             except Exception as e:
-                print(f"Error processing EU-Startups company: {str(e)}")
+                print(f"Error processing company listing: {str(e)}")
+                continue
                 
     except Exception as e:
-        print(f"Error scraping EU-Startups: {str(e)}")
-    
-    return startups
-
-# Scrape Sifted
-def scrape_sifted():
-    print("Scraping Sifted...")
-    base_url = "https://sifted.eu"
-    url = f"{base_url}/startups"
-    startups = []
-    
-    try:
-        response = requests.get(url, headers=HEADERS)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        for item in soup.select('.article-list-item'):
-            try:
-                title = clean_text(item.select_one('h2').text)
-                article_url = urljoin(base_url, item.select_one('a')['href'])
-                summary = clean_text(item.select_one('p').text) if item.select_one('p') else ''
-                
-                startups.append({
-                    'Name': title,
-                    'Industry': '',
-                    'Country': '',
-                    'Activities': summary,
-                    'Website URL': article_url,
-                    'Contact Name': '',
-                    'Contact Position': '',
-                    'Contact Email': '',
-                    'LinkedIn Url': '',
-                    'Funding Stage': 'Series A/B',
-                    'Last update': datetime.now().strftime('%Y-%m-%d'),
-                    'Source': 'Sifted'
-                })
-            except Exception as e:
-                print(f"Error processing Sifted article: {str(e)}")
-                
-    except Exception as e:
-        print(f"Error scraping Sifted: {str(e)}")
-    
-    return startups
-
-# Scrape TechCrunch
-def scrape_techcrunch():
-    print("Scraping TechCrunch...")
-    base_url = "https://techcrunch.com"
-    url = f"{base_url}/tag/european-startups/"
-    startups = []
-    
-    try:
-        response = requests.get(url, headers=HEADERS)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        for post in soup.select('.post-block'):
-            try:
-                title = clean_text(post.select_one('.post-block__title').text)
-                article_url = post.select_one('.post-block__title__link')['href']
-                summary = clean_text(post.select_one('.post-block__content').text) if post.select_one('.post-block__content') else ''
-                
-                startups.append({
-                    'Name': title,
-                    'Industry': '',
-                    'Country': '',
-                    'Activities': summary,
-                    'Website URL': article_url,
-                    'Contact Name': '',
-                    'Contact Position': '',
-                    'Contact Email': '',
-                    'LinkedIn Url': '',
-                    'Funding Stage': 'Series A/B',
-                    'Last update': datetime.now().strftime('%Y-%m-%d'),
-                    'Source': 'TechCrunch'
-                })
-            except Exception as e:
-                print(f"Error processing TechCrunch post: {str(e)}")
-                
-    except Exception as e:
-        print(f"Error scraping TechCrunch: {str(e)}")
+        print(f"Error scraping EU-Startups Directory: {str(e)}")
     
     return startups
 
@@ -245,18 +106,13 @@ def main():
     existing_data = worksheet.get_all_records()
     existing_names = [row['Name'] for row in existing_data]
     
-    # Scrape all sources
-    all_startups = []
-    all_startups.extend(scrape_crunchbase())
-    all_startups.extend(scrape_seedtable())
-    all_startups.extend(scrape_eu_startups())
-    all_startups.extend(scrape_sifted())
-    all_startups.extend(scrape_techcrunch())
+    # Scrape EU-Startups Directory
+    startups = scrape_eu_startups_directory()
     
     # Prepare new rows
     new_rows = []
-    for startup in all_startups:
-        if startup['Name'] not in existing_names:
+    for startup in startups:
+        if startup['Name'] and startup['Name'] not in existing_names:
             new_rows.append([
                 startup['Name'],
                 startup['Industry'],
